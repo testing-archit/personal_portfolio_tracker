@@ -41,9 +41,9 @@ export async function addFund(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function deleteFund(id: string) {
+export async function deleteHolding(id: string, instrumentType: "mutual_fund" | "etf") {
   const supabase = await createClient();
-  const { error } = await supabase.from("funds").delete().eq("id", id);
+  const { error } = await supabase.from(instrumentType === "etf" ? "etfs" : "funds").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");
 }

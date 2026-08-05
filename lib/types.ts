@@ -12,8 +12,34 @@ export type Fund = {
 };
 
 export type NavPoint = { date: string; nav: string };
+export type PortfolioPoint = { date: string; label: string; value: number };
 
-export type Holding = Fund & {
+export type Etf = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  exchange: string;
+  name: string;
+  short_name: string;
+  category: string;
+  quantity: number;
+  avg_price: number;
+  invested_amount: number;
+  last_price: number | null;
+  last_price_at: string | null;
+};
+
+export type Holding = {
+  id: string;
+  user_id: string;
+  instrumentType: "mutual_fund" | "etf";
+  name: string;
+  short_name: string;
+  category: string;
+  invested_amount: number;
+  purchase_date: string | null;
+  units: number | null;
+  purchase_nav: number | null;
   currentNav: number | null;
   currentNavDate: string | null;
   effectiveUnits: number | null;

@@ -7,7 +7,7 @@ A private, Vercel-ready mutual-fund portfolio tracker built with Next.js 16, Sup
 - Email/password login with cookie-based Supabase SSR auth
 - Row-level security so each user only sees their own holdings
 - The four screenshot purchases already mapped to AMFI scheme codes
-- Latest and purchase-date NAV lookup with a one-hour server cache
+- Latest and purchase-date NAV lookup plus market-priced ETF holdings
 - Current value, return, allocation, responsive holdings table, add/remove flows
 - Exact-unit support; until units are entered, values are clearly marked as estimates
 
