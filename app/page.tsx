@@ -8,6 +8,8 @@ import { AllocationRing } from "@/components/allocation-ring";
 import { HoldingsTable } from "@/components/holdings-table";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PortfolioInsights } from "@/components/portfolio-insights";
+import { PlanningTools } from "@/components/planning-tools";
+import { RecentActivity } from "@/components/recent-activity";
 import { logout, seedPortfolio } from "./actions";
 
 export default async function Dashboard() {
@@ -33,7 +35,7 @@ export default async function Dashboard() {
     <main className="dashboard-shell">
       <header className="topbar">
         <a className="brand" href="#"><span>F</span>folio</a>
-        <nav><a className="active" href="#overview">Overview</a><a href="#insights">Insights</a><a href="#holdings">Holdings</a></nav>
+        <nav><a className="active" href="#overview">Overview</a><a href="#insights">Insights</a><a href="#planner">Planner</a><a href="#holdings">Holdings</a></nav>
         <div className="top-actions"><AddFund /><form action={logout}><button className="icon-button" aria-label="Sign out"><LogOut size={18}/></button></form><div className="avatar">{name.slice(0, 1).toUpperCase()}</div></div>
       </header>
       <section className="dashboard-content" id="overview">
@@ -53,6 +55,7 @@ export default async function Dashboard() {
               <article className="panel allocation-panel"><div className="panel-head"><div><p className="eyebrow">ALLOCATION</p><h2>By category</h2></div></div><AllocationRing holdings={holdings}/></article>
             </section>
             <PortfolioInsights holdings={holdings} current={current}/>
+            <section className="tools-grid"><PlanningTools current={current}/><RecentActivity holdings={holdings}/></section>
             <section id="holdings" className="holdings-section"><div className="section-head"><div><p className="eyebrow">YOUR PORTFOLIO</p><h2>Holdings</h2></div><div className="estimate-key"><Clock3 size={14}/> Fund estimates use purchase-date NAV; ETF quotes refresh during market hours.</div></div><HoldingsTable holdings={holdings}/></section>
           </>
         )}
