@@ -10,6 +10,7 @@ A private, Vercel-ready mutual-fund portfolio tracker built with Next.js 16, Sup
 - Latest and purchase-date NAV lookup plus market-priced ETF holdings
 - Current value, return, allocation, responsive holdings table, add/remove flows
 - Interactive SIP projection, portfolio search/filter/sort, and CSV export
+- Privacy mode, printable reports, return attribution, and rebalancing sandbox
 - Exact-unit support; until units are entered, values are clearly marked as estimates
 
 ## Local setup
