@@ -1,4 +1,5 @@
 import { ArrowUpRight, LockKeyhole } from "lucide-react";
+import { SubmitButton } from "@/components/submit-button";
 import { login } from "./actions";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
@@ -38,7 +39,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <label>Email address<input name="email" type="email" placeholder="you@example.com" required autoComplete="email" /></label>
             <label>Password<input name="password" type="password" placeholder="••••••••" required autoComplete="current-password" /></label>
             {error ? <p className="form-error">{error}</p> : null}
-            <button type="submit" disabled={!configured}>Sign in <ArrowUpRight size={18} /></button>
+            <SubmitButton disabled={!configured} pendingLabel="Signing in...">Sign in <ArrowUpRight size={18} /></SubmitButton>
           </form>
           <p className="security-note"><LockKeyhole size={13} /> Encrypted sign-in. Your data stays private.</p>
         </div>

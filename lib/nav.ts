@@ -1,4 +1,4 @@
-import type { Etf, Fund, Holding, NavPoint, PortfolioPoint } from "@/lib/types";
+import type { DailyMovement, Etf, Fund, Holding, NavPoint, PortfolioPoint } from "@/lib/types";
 
 type MfApiResponse = {
   data?: NavPoint[];
@@ -156,5 +156,12 @@ export async function getPortfolioSeries(funds: Fund[], etfs: Etf[]): Promise<Po
       label: new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00`)),
       value: fundValue + etfValue,
     };
+  });
+}
+
+export function getDailyMovement(series: PortfolioPoint[]): DailyMovement[] {
+  return series.slice(1).map((point, index) => {
+    const previous = series[index].value;
+    return { date: point.date, change: previous ? ((point.value - previous) / previous) * 100 : 0 };
   });
 }

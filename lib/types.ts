@@ -13,6 +13,7 @@ export type Fund = {
 
 export type NavPoint = { date: string; nav: string };
 export type PortfolioPoint = { date: string; label: string; value: number };
+export type DailyMovement = { date: string; change: number };
 
 export type Etf = {
   id: string;

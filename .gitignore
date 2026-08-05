@@ -5,3 +5,5 @@ node_modules
 *.log
 .vercel
 supabase/.temp/
+.bug-hunter/
+tsconfig.tsbuildinfo

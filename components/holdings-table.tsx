@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Download, MoreHorizontal, Save, Search, Trash2 } from "lucide-react";
 import { deleteHolding, updateAllotment } from "@/app/actions";
 import { friendlyDate, inr } from "@/lib/format";
+import { SubmitButton } from "@/components/submit-button";
 import type { Holding } from "@/lib/types";
 
 type Filter = "all" | "mutual_fund" | "etf";
@@ -48,7 +49,7 @@ export function HoldingsTable({ holdings }: { holdings: Holding[] }) {
               <td><strong>{inr.format(fund.currentValue)}</strong>{fund.isEstimated ? <small className="estimate">Estimated</small> : null}</td>
               <td className={fund.gain >= 0 ? "positive" : "negative"}><strong>{fund.gain >= 0 ? "+" : ""}{inr.format(fund.gain)}</strong><small>{fund.gainPercent >= 0 ? "+" : ""}{fund.gainPercent.toFixed(2)}%</small></td>
               <td><strong>{fund.currentNav ? inr.format(fund.currentNav) : "—"}</strong><small>{fund.currentNavDate ?? "Unavailable"}</small></td>
-              <td><details className="row-menu"><summary aria-label="More actions"><MoreHorizontal /></summary><div className="row-popover">{fund.instrumentType === "mutual_fund" ? <><p>Add exact allotment</p><form action={updateAllotment} className="allotment-form"><input type="hidden" name="id" value={fund.id}/><label>Units<input name="units" type="number" min="0" step="0.000001" defaultValue={fund.units ?? undefined} placeholder={fund.effectiveUnits?.toFixed(4)} required/></label><label>Purchase NAV<input name="purchase_nav" type="number" min="0" step="0.0001" defaultValue={fund.purchase_nav ?? undefined} placeholder={fund.effectivePurchaseNav?.toFixed(4)} required/></label><button className="save-action"><Save size={14}/> Save exact values</button></form></> : <p>ETF holding</p>}<form action={deleteHolding.bind(null, fund.id, fund.instrumentType)}><button className="delete-action"><Trash2 size={14}/> Remove holding</button></form></div></details></td>
+              <td><details className="row-menu"><summary aria-label="More actions"><MoreHorizontal /></summary><div className="row-popover">{fund.instrumentType === "mutual_fund" ? <><p>Add exact allotment</p><form action={updateAllotment} className="allotment-form"><input type="hidden" name="id" value={fund.id}/><label>Units<input name="units" type="number" min="0" step="0.000001" defaultValue={fund.units ?? undefined} placeholder={fund.effectiveUnits?.toFixed(4)} required/></label><label>Purchase NAV<input name="purchase_nav" type="number" min="0" step="0.0001" defaultValue={fund.purchase_nav ?? undefined} placeholder={fund.effectivePurchaseNav?.toFixed(4)} required/></label><SubmitButton className="save-action" pendingLabel="Saving..."><Save size={14}/> Save exact values</SubmitButton></form></> : <p>ETF holding</p>}<form action={deleteHolding.bind(null, fund.id, fund.instrumentType)}><SubmitButton className="delete-action" pendingLabel="Removing..."><Trash2 size={14}/> Remove holding</SubmitButton></form></div></details></td>
             </tr>
           ))}</tbody>
         </table>

@@ -49,7 +49,7 @@ export function PortfolioChart({ series, invested, current }: { series: Portfoli
           <defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#d6fb5c" stopOpacity=".3"/><stop offset="1" stopColor="#d6fb5c" stopOpacity="0"/></linearGradient></defs>
           {[.25,.5,.75].map(position => <line key={position} x1="0" x2={width} y1={height * position} y2={height * position} className="gridline"/>)}
           <path d={area} fill="url(#chartFill)" className="chart-area"/>
-          <path d={line} fill="none" stroke="#b9df28" strokeWidth="3" vectorEffect="non-scaling-stroke" className="chart-line"/>
+          <path d={line} fill="none" stroke="#b9df28" strokeWidth="3" vectorEffect="non-scaling-stroke" pathLength={1} className="chart-line"/>
           {active ? <><line x1={active.x} x2={active.x} y1="0" y2={height} className="hover-line"/><circle cx={active.x} cy={active.y} r="5" fill="#171a14" stroke="#d6fb5c" strokeWidth="3" vectorEffect="non-scaling-stroke"/></> : null}
         </svg>
         {active ? <div className="chart-tooltip" style={{ left: `${(active.x / width) * 100}%`, top: `${Math.max(2, (active.y / height) * 100 - 23)}%` }}><strong>{inr.format(active.value)}</strong><span>{active.label}</span></div> : null}
