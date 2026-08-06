@@ -43,7 +43,7 @@ export default async function Dashboard() {
     <main className="dashboard-shell">
       <header className="topbar">
         <a className="brand" href="#"><span>F</span>folio</a>
-        <nav><a className="active" href="#overview">Overview</a><a href="#insights">Insights</a><a href="#analytics">Analytics</a><a href="#planner">Planner</a><a href="#holdings">Holdings</a></nav>
+        <nav><a className="active" href="#overview">Overview</a><a href="#holdings">Holdings</a><a href="#insights">Insights</a><a href="#analytics">Analytics</a><a href="#planner">Planner</a></nav>
         <div className="top-actions"><PortfolioControls/><AddFund /><form action={logout}><SubmitButton className="icon-button" aria-label="Sign out"><LogOut size={18}/></SubmitButton></form><div className="avatar">{name.slice(0, 1).toUpperCase()}</div></div>
       </header>
       <section className="dashboard-content" id="overview">
@@ -58,15 +58,13 @@ export default async function Dashboard() {
               <article className="metric"><p>Total returns</p><strong className={gain >= 0 ? "positive" : "negative"}>{gain >= 0 ? "+" : ""}{inr.format(gain)}</strong><small>Since 4 Aug 2026</small></article>
               <article className="metric"><p>Best performer</p><strong className="fund-winner">{[...holdings].sort((a,b) => b.gainPercent-a.gainPercent)[0]?.short_name}</strong><small className="positive">{Math.max(...holdings.map(h => h.gainPercent)).toFixed(2)}% return</small></article>
             </section>
-            <section className="insight-grid">
-              <article className="panel chart-panel"><div className="panel-head"><div><p className="eyebrow">PORTFOLIO MOVEMENT</p><h2>{compactInr.format(current)}</h2></div><span className="live-chip"><i/> Interactive history</span></div><PortfolioChart series={portfolioSeries} invested={invested} current={current}/></article>
-              <article className="panel allocation-panel"><div className="panel-head"><div><p className="eyebrow">ALLOCATION</p><h2>By category</h2></div></div><AllocationRing holdings={holdings}/></article>
-            </section>
+            <article className="panel chart-panel full-panel"><div className="panel-head"><div><p className="eyebrow">PORTFOLIO MOVEMENT</p><h2>{compactInr.format(current)}</h2></div><span className="live-chip"><i/> Interactive history</span></div><PortfolioChart series={portfolioSeries} invested={invested} current={current}/></article>
+            <section id="holdings" className="holdings-section"><div className="section-head"><div><p className="eyebrow">YOUR PORTFOLIO</p><h2>Holdings</h2></div><div className="estimate-key"><Clock3 size={14}/> Fund estimates use purchase-date NAV; ETF quotes refresh during market hours.</div></div><HoldingsTable holdings={holdings}/></section>
+            <article className="panel allocation-panel full-panel"><div className="panel-head"><div><p className="eyebrow">ALLOCATION</p><h2>By category</h2></div></div><AllocationRing holdings={holdings}/></article>
+            <MovementCalendar movements={dailyMovement}/>
             <PortfolioInsights holdings={holdings} current={current}/>
             <section className="analytics-grid"><RebalancingLab holdings={holdings} current={current}/><ReturnAttribution holdings={holdings}/></section>
-            <MovementCalendar movements={dailyMovement}/>
             <section className="tools-grid"><PlanningTools current={current}/><RecentActivity holdings={holdings}/></section>
-            <section id="holdings" className="holdings-section"><div className="section-head"><div><p className="eyebrow">YOUR PORTFOLIO</p><h2>Holdings</h2></div><div className="estimate-key"><Clock3 size={14}/> Fund estimates use purchase-date NAV; ETF quotes refresh during market hours.</div></div><HoldingsTable holdings={holdings}/></section>
           </>
         )}
       </section>

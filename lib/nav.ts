@@ -1,3 +1,4 @@
+import { friendlyDate } from "@/lib/format";
 import type { DailyMovement, Etf, Fund, Holding, NavPoint, PortfolioPoint } from "@/lib/types";
 
 type MfApiResponse = {
@@ -12,7 +13,7 @@ function apiDateToIso(value: string) {
 async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
   try {
     const response = await fetch(`https://api.mfapi.in/mf/${schemeCode}`, {
-      cache: "no-store",
+      next: { revalidate: 60 },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
@@ -48,7 +49,7 @@ export async function enrichFund(fund: Fund): Promise<Holding> {
     units: fund.units,
     purchase_nav: fund.purchase_nav,
     currentNav,
-    currentNavDate: latest?.date ?? null,
+    currentNavDate: latest ? friendlyDate(apiDateToIso(latest.date)) : null,
     effectivePurchaseNav: purchaseNav,
     effectiveUnits: units,
     currentValue,
@@ -70,7 +71,7 @@ async function getEtfQuote(symbol: string) {
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1d&interval=5m`,
       {
         headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-        cache: "no-store",
+        next: { revalidate: 60 },
         signal: AbortSignal.timeout(6000),
       },
     );
