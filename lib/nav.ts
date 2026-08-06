@@ -119,9 +119,26 @@ export async function enrichFund(fund: Fund, officialLatest?: LatestFundNav): Pr
 
 type YahooChartResponse = {
   chart?: {
-    result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketTime?: number } }>;
+    result?: Array<{
+      meta?: { regularMarketPrice?: number; regularMarketTime?: number };
+      timestamp?: number[];
+      indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+    }>;
   };
 };
+
+type EtfPricePoint = { date: string; price: number };
+
+function timestampToIso(timestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).formatToParts(new Date(timestamp * 1000));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
 
 async function getEtfQuote(symbol: string) {
   try {
@@ -140,6 +157,40 @@ async function getEtfQuote(symbol: string) {
     return { price: meta.regularMarketPrice, timestamp: meta.regularMarketTime ?? null };
   } catch {
     return null;
+  }
+}
+
+async function getEtfHistory(symbol: string): Promise<EtfPricePoint[]> {
+  try {
+    const response = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1mo&interval=1d`,
+      {
+        headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
+        next: { revalidate: 60 },
+        signal: AbortSignal.timeout(6000),
+      },
+    );
+    if (!response.ok) return [];
+    const payload = (await response.json()) as YahooChartResponse;
+    const result = payload.chart?.result?.[0];
+    if (!result) return [];
+
+    const prices = new Map<string, EtfPricePoint>();
+    const closes = result.indicators?.quote?.[0]?.close ?? [];
+    for (const [index, timestamp] of (result.timestamp ?? []).entries()) {
+      const price = closes[index];
+      if (price && Number.isFinite(price)) {
+        const date = timestampToIso(timestamp);
+        prices.set(date, { date, price });
+      }
+    }
+    if (result.meta?.regularMarketPrice && result.meta.regularMarketTime) {
+      const date = timestampToIso(result.meta.regularMarketTime);
+      prices.set(date, { date, price: result.meta.regularMarketPrice });
+    }
+    return [...prices.values()].sort((a, b) => a.date.localeCompare(b.date));
+  } catch {
+    return [];
   }
 }
 
@@ -181,7 +232,10 @@ export async function getPortfolioSeries(
   etfs: Etf[],
   latestFundNavs: ReadonlyMap<number, LatestFundNav> = new Map(),
 ): Promise<PortfolioPoint[]> {
-  const histories = await Promise.all(funds.map(async (fund) => ({ fund, history: await getNavHistory(fund.scheme_code) })));
+  const [histories, etfHistories] = await Promise.all([
+    Promise.all(funds.map(async (fund) => ({ fund, history: await getNavHistory(fund.scheme_code) }))),
+    Promise.all(etfs.map(async (etf) => ({ etf, history: await getEtfHistory(etf.symbol) }))),
+  ]);
   const datedHistories = histories.map(({ fund, history }) => {
     const historicalPoints = history
       .map((point) => ({ date: apiDateToIso(point.date), nav: Number(point.nav) }))
@@ -196,7 +250,10 @@ export async function getPortfolioSeries(
   });
   const dates = [...new Set(datedHistories.flatMap(({ chronological }) => chronological.map((point) => point.date)))].sort();
   const etfInvested = etfs.reduce((sum, etf) => sum + etf.invested_amount, 0);
-  const etfCurrent = etfs.reduce((sum, etf) => sum + (etf.last_price ?? etf.avg_price) * etf.quantity, 0);
+  const etfCurrent = etfHistories.reduce((sum, item) => {
+    const latestPrice = item.history.at(-1)?.price ?? item.etf.last_price ?? item.etf.avg_price;
+    return sum + latestPrice * item.etf.quantity;
+  }, 0);
 
   if (dates.length < 2) {
     const invested = funds.reduce((sum, fund) => sum + fund.invested_amount, 0) + etfInvested;
@@ -210,13 +267,15 @@ export async function getPortfolioSeries(
     ];
   }
 
-  return dates.map((date, index) => {
+  return dates.map((date) => {
     const fundValue = datedHistories.reduce((sum, item) => {
       const point = [...item.chronological].reverse().find((candidate) => candidate.date <= date);
       return sum + (point && item.units ? point.nav * item.units : item.fund.invested_amount);
     }, 0);
-    const etfProgress = dates.length > 1 ? index / (dates.length - 1) : 1;
-    const etfValue = etfInvested + (etfCurrent - etfInvested) * etfProgress;
+    const etfValue = etfHistories.reduce((sum, item) => {
+      const point = [...item.history].reverse().find((candidate) => candidate.date <= date);
+      return sum + (point ? point.price * item.etf.quantity : item.etf.invested_amount);
+    }, 0);
     return {
       date,
       label: new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00`)),
@@ -228,7 +287,6 @@ export async function getPortfolioSeries(
 export function getDailyMovement(series: PortfolioPoint[]): DailyMovement[] {
   return series.slice(1).map((point, index) => {
     const previous = series[index].value;
-    const change = previous ? ((point.value - previous) / previous) * 100 : 0;
-    return { date: point.date, change: Math.abs(change) < 0.005 ? 0 : change };
+    return { date: point.date, change: previous ? ((point.value - previous) / previous) * 100 : 0 };
   });
 }
