@@ -12,7 +12,7 @@ function apiDateToIso(value: string) {
 async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
   try {
     const response = await fetch(`https://api.mfapi.in/mf/${schemeCode}`, {
-      next: { revalidate: 3600 },
+      cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
@@ -70,7 +70,7 @@ async function getEtfQuote(symbol: string) {
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1d&interval=5m`,
       {
         headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-        next: { revalidate: 300 },
+        cache: "no-store",
         signal: AbortSignal.timeout(6000),
       },
     );
