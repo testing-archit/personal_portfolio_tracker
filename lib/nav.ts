@@ -228,6 +228,7 @@ export async function getPortfolioSeries(
 export function getDailyMovement(series: PortfolioPoint[]): DailyMovement[] {
   return series.slice(1).map((point, index) => {
     const previous = series[index].value;
-    return { date: point.date, change: previous ? ((point.value - previous) / previous) * 100 : 0 };
+    const change = previous ? ((point.value - previous) / previous) * 100 : 0;
+    return { date: point.date, change: Math.abs(change) < 0.005 ? 0 : change };
   });
 }

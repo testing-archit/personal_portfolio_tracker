@@ -65,7 +65,7 @@ export function MovementCalendar({ movements }: { movements: DailyMovement[] }) 
                       <div
                         key={date}
                         className="calendar-cell"
-                        data-move={change >= 0 ? "up" : "down"}
+                        data-move={change > 0 ? "up" : change < 0 ? "down" : "flat"}
                         style={{ "--intensity": `${intensity}%` } as React.CSSProperties}
                         onMouseEnter={() => setHovered(date)}
                         onMouseLeave={() => setHovered((current) => (current === date ? null : current))}
@@ -73,7 +73,7 @@ export function MovementCalendar({ movements }: { movements: DailyMovement[] }) 
                         {day}
                         {hovered === date ? (
                           <div className="calendar-tooltip">
-                            <strong>{change >= 0 ? "+" : ""}{change.toFixed(2)}%</strong>
+                            <strong>{change > 0 ? "+" : ""}{change.toFixed(2)}%</strong>
                             {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00`))}
                           </div>
                         ) : null}
