@@ -5,9 +5,62 @@ type MfApiResponse = {
   data?: NavPoint[];
 };
 
+export type LatestFundNav = {
+  date: string;
+  nav: number;
+};
+
+const monthNumbers: Record<string, string> = {
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
+};
+
 function apiDateToIso(value: string) {
   const [day, month, year] = value.split("-");
   return `${year}-${month}-${day}`;
+}
+
+function amfiDateToIso(value: string) {
+  const [day, month, year] = value.trim().split("-");
+  const monthNumber = monthNumbers[month?.toLowerCase()];
+  return day && monthNumber && year ? `${year}-${monthNumber}-${day.padStart(2, "0")}` : null;
+}
+
+export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFundNav>> {
+  try {
+    const response = await fetch("https://portal.amfiindia.com/spages/NAVAll.txt", {
+      headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) return new Map();
+
+    const latestNavs = new Map<number, LatestFundNav>();
+    const body = await response.text();
+    for (const line of body.split(/\r?\n/)) {
+      const columns = line.split(";");
+      if (columns.length < 6) continue;
+      const schemeCode = Number(columns[0]);
+      const nav = Number(columns[4]);
+      const date = amfiDateToIso(columns[5]);
+      if (Number.isInteger(schemeCode) && Number.isFinite(nav) && nav > 0 && date) {
+        latestNavs.set(schemeCode, { date, nav });
+      }
+    }
+    return latestNavs;
+  } catch {
+    return new Map();
+  }
 }
 
 async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
@@ -24,14 +77,19 @@ async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
   }
 }
 
-export async function enrichFund(fund: Fund): Promise<Holding> {
+export async function enrichFund(fund: Fund, officialLatest?: LatestFundNav): Promise<Holding> {
   const history = await getNavHistory(fund.scheme_code);
-  const latest = history[0];
+  const apiLatest = history[0]
+    ? { date: apiDateToIso(history[0].date), nav: Number(history[0].nav) }
+    : null;
+  const latest = officialLatest && (!apiLatest || officialLatest.date >= apiLatest.date)
+    ? officialLatest
+    : apiLatest;
   const purchasePoint = history
     .slice()
     .reverse()
     .find((point) => apiDateToIso(point.date) >= fund.purchase_date);
-  const currentNav = latest ? Number(latest.nav) : null;
+  const currentNav = latest?.nav ?? null;
   const purchaseNav = fund.purchase_nav ?? (purchasePoint ? Number(purchasePoint.nav) : null);
   const units = fund.units ?? (purchaseNav ? fund.invested_amount / purchaseNav : null);
   const currentValue = currentNav && units ? currentNav * units : fund.invested_amount;
@@ -49,7 +107,7 @@ export async function enrichFund(fund: Fund): Promise<Holding> {
     units: fund.units,
     purchase_nav: fund.purchase_nav,
     currentNav,
-    currentNavDate: latest ? friendlyDate(apiDateToIso(latest.date)) : null,
+    currentNavDate: latest ? friendlyDate(latest.date) : null,
     effectivePurchaseNav: purchaseNav,
     effectiveUnits: units,
     currentValue,
@@ -118,12 +176,19 @@ export async function enrichEtf(etf: Etf): Promise<Holding> {
   };
 }
 
-export async function getPortfolioSeries(funds: Fund[], etfs: Etf[]): Promise<PortfolioPoint[]> {
+export async function getPortfolioSeries(
+  funds: Fund[],
+  etfs: Etf[],
+  latestFundNavs: ReadonlyMap<number, LatestFundNav> = new Map(),
+): Promise<PortfolioPoint[]> {
   const histories = await Promise.all(funds.map(async (fund) => ({ fund, history: await getNavHistory(fund.scheme_code) })));
   const datedHistories = histories.map(({ fund, history }) => {
-    const chronological = history
+    const historicalPoints = history
       .map((point) => ({ date: apiDateToIso(point.date), nav: Number(point.nav) }))
-      .filter((point) => point.date >= fund.purchase_date && Number.isFinite(point.nav))
+      .filter((point) => point.date >= fund.purchase_date && Number.isFinite(point.nav));
+    const officialLatest = latestFundNavs.get(fund.scheme_code);
+    if (officialLatest && officialLatest.date >= fund.purchase_date) historicalPoints.push(officialLatest);
+    const chronological = [...new Map(historicalPoints.map((point) => [point.date, point])).values()]
       .sort((a, b) => a.date.localeCompare(b.date));
     const purchaseNav = fund.purchase_nav ?? chronological[0]?.nav ?? null;
     const units = fund.units ?? (purchaseNav ? fund.invested_amount / purchaseNav : null);

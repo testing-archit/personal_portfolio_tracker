@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Clock3, LogOut, RefreshCw, Sparkles, WalletCards } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { enrichEtf, enrichFund, getDailyMovement, getPortfolioSeries } from "@/lib/nav";
+import { enrichEtf, enrichFund, getDailyMovement, getLatestFundNavs, getPortfolioSeries } from "@/lib/nav";
 import type { Etf, Fund } from "@/lib/types";
 import { compactInr, inr } from "@/lib/format";
 import { AddFund } from "@/components/add-fund";
@@ -26,11 +26,14 @@ export default async function Dashboard() {
     supabase.from("funds").select("*").order("invested_amount", { ascending: false }),
     supabase.from("etfs").select("*").order("invested_amount", { ascending: false }),
   ]);
+  const funds = (fundData ?? []) as Fund[];
+  const etfs = (etfData ?? []) as Etf[];
+  const latestFundNavs = await getLatestFundNavs();
   const holdings = await Promise.all([
-    ...((fundData ?? []) as Fund[]).map(enrichFund),
-    ...((etfData ?? []) as Etf[]).map(enrichEtf),
+    ...funds.map((fund) => enrichFund(fund, latestFundNavs.get(fund.scheme_code))),
+    ...etfs.map(enrichEtf),
   ]);
-  const portfolioSeries = await getPortfolioSeries((fundData ?? []) as Fund[], (etfData ?? []) as Etf[]);
+  const portfolioSeries = await getPortfolioSeries(funds, etfs, latestFundNavs);
   const dailyMovement = getDailyMovement(portfolioSeries);
   const invested = holdings.reduce((sum, item) => sum + item.invested_amount, 0);
   const current = holdings.reduce((sum, item) => sum + item.currentValue, 0);
