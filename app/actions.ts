@@ -68,12 +68,13 @@ export async function addEtf(formData: FormData) {
 export async function updateEtfHolding(formData: FormData) {
   const supabase = await createClient();
   const id = String(formData.get("id"));
+  const symbol = String(formData.get("symbol")).trim().toUpperCase();
   const quantity = Number(formData.get("quantity"));
   const avgPrice = Number(formData.get("avg_price"));
-  if (!id || !(quantity > 0) || !(avgPrice > 0)) throw new Error("Valid quantity and average price are required.");
+  if (!id || !symbol || !(quantity > 0) || !(avgPrice > 0)) throw new Error("Valid symbol, quantity, and average price are required.");
   const { error } = await supabase
     .from("etfs")
-    .update({ quantity, avg_price: avgPrice, invested_amount: quantity * avgPrice, updated_at: new Date().toISOString() })
+    .update({ symbol, quantity, avg_price: avgPrice, invested_amount: quantity * avgPrice, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/");

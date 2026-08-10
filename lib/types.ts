@@ -34,6 +34,7 @@ export type Holding = {
   id: string;
   user_id: string;
   instrumentType: "mutual_fund" | "etf";
+  symbol: string | null;
   name: string;
   short_name: string;
   category: string;
