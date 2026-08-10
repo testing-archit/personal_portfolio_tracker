@@ -41,6 +41,44 @@ export async function addFund(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function addEtf(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const quantity = Number(formData.get("quantity"));
+  const avgPrice = Number(formData.get("avg_price"));
+  if (!(quantity > 0) || !(avgPrice > 0)) throw new Error("Valid quantity and average price are required.");
+  const investedInput = formData.get("invested_amount");
+  const row = {
+    user_id: user.id,
+    symbol: String(formData.get("symbol")).trim().toUpperCase(),
+    exchange: "NSE",
+    name: String(formData.get("name")),
+    short_name: String(formData.get("short_name")),
+    category: String(formData.get("category")),
+    quantity,
+    avg_price: avgPrice,
+    invested_amount: investedInput ? Number(investedInput) : quantity * avgPrice,
+  };
+  const { error } = await supabase.from("etfs").insert(row);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+export async function updateEtfHolding(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id"));
+  const quantity = Number(formData.get("quantity"));
+  const avgPrice = Number(formData.get("avg_price"));
+  if (!id || !(quantity > 0) || !(avgPrice > 0)) throw new Error("Valid quantity and average price are required.");
+  const { error } = await supabase
+    .from("etfs")
+    .update({ quantity, avg_price: avgPrice, invested_amount: quantity * avgPrice, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 export async function deleteHolding(id: string, instrumentType: "mutual_fund" | "etf") {
   const supabase = await createClient();
   const { error } = await supabase.from(instrumentType === "etf" ? "etfs" : "funds").delete().eq("id", id);

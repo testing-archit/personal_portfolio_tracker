@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { enrichEtf, enrichFund, getDailyMovement, getPortfolioSeries, loadMarketData } from "@/lib/nav";
 import type { Etf, Fund } from "@/lib/types";
 import { compactInr, friendlyDate, inr } from "@/lib/format";
-import { AddFund } from "@/components/add-fund";
+import { AddHolding } from "@/components/add-holding";
 import { AllocationRing } from "@/components/allocation-ring";
 import { HoldingsTable } from "@/components/holdings-table";
 import { MovementCalendar } from "@/components/movement-calendar";
@@ -51,7 +51,7 @@ export default async function Dashboard() {
       <header className="topbar">
         <a className="brand" href="#"><span>F</span>folio</a>
         <nav><a className="active" href="#overview">Overview</a><a href="#holdings">Holdings</a><a href="#insights">Insights</a><a href="#analytics">Analytics</a><a href="#planner">Planner</a></nav>
-        <div className="top-actions"><PortfolioControls/><AddFund /><form action={logout}><SubmitButton className="icon-button" aria-label="Sign out"><LogOut size={18}/></SubmitButton></form><div className="avatar">{name.slice(0, 1).toUpperCase()}</div></div>
+        <div className="top-actions"><PortfolioControls/><AddHolding /><form action={logout}><SubmitButton className="icon-button" aria-label="Sign out"><LogOut size={18}/></SubmitButton></form><div className="avatar">{name.slice(0, 1).toUpperCase()}</div></div>
       </header>
       <section className="dashboard-content" id="overview">
         <div className="welcome-row"><div><p className="eyebrow">GOOD MORNING, {name.toUpperCase()}</p><h1>Your money, at a glance.</h1></div><div className="nav-status"><RefreshCw size={14}/><span>Latest prices</span><strong>{latestDate ?? "Waiting for data"}</strong></div></div>
