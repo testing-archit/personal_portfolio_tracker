@@ -10,6 +10,14 @@ export type LatestFundNav = {
   nav: number;
 };
 
+// Vercel's free plan doesn't give background revalidation of `fetch` caching any
+// reliability guarantee for a low-traffic app like this one: if a single revalidation
+// fails, the stale response can be served indefinitely with nothing visibly wrong.
+// Traffic here is low enough that hitting upstream on every render is cheap, so every
+// market-data fetch below opts out of the cache entirely instead of trusting a revalidate
+// window we can't observe.
+const NO_STORE = { cache: "no-store" as const };
+
 const monthNumbers: Record<string, string> = {
   jan: "01",
   feb: "02",
@@ -36,14 +44,40 @@ function amfiDateToIso(value: string) {
   return day && monthNumber && year ? `${year}-${monthNumber}-${day.padStart(2, "0")}` : null;
 }
 
+function dateToIso(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function timestampToIso(timestamp: number) {
+  return dateToIso(new Date(timestamp * 1000));
+}
+
+function todayIso() {
+  return dateToIso(new Date());
+}
+
+function shortLabel(date: string) {
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00`));
+}
+
 export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFundNav>> {
   try {
     const response = await fetch("https://portal.amfiindia.com/spages/NAVAll.txt", {
       headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-      next: { revalidate: 300 },
+      ...NO_STORE,
       signal: AbortSignal.timeout(12000),
     });
-    if (!response.ok) return new Map();
+    if (!response.ok) {
+      console.error(`getLatestFundNavs: AMFI feed returned ${response.status}`);
+      return new Map();
+    }
 
     const latestNavs = new Map<number, LatestFundNav>();
     const body = await response.text();
@@ -57,8 +91,12 @@ export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFun
         latestNavs.set(schemeCode, { date, nav });
       }
     }
+    if (latestNavs.size === 0) {
+      console.error("getLatestFundNavs: AMFI feed parsed to zero entries, format may have changed");
+    }
     return latestNavs;
-  } catch {
+  } catch (error) {
+    console.error("getLatestFundNavs failed", error);
     return new Map();
   }
 }
@@ -66,19 +104,19 @@ export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFun
 async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
   try {
     const response = await fetch(`https://api.mfapi.in/mf/${schemeCode}`, {
-      next: { revalidate: 60 },
+      ...NO_STORE,
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
     const payload = (await response.json()) as MfApiResponse;
     return payload.data ?? [];
-  } catch {
+  } catch (error) {
+    console.error(`getNavHistory(${schemeCode}) failed`, error);
     return [];
   }
 }
 
-export async function enrichFund(fund: Fund, officialLatest?: LatestFundNav): Promise<Holding> {
-  const history = await getNavHistory(fund.scheme_code);
+export function enrichFund(fund: Fund, history: NavPoint[], officialLatest?: LatestFundNav): Holding {
   const apiLatest = history[0]
     ? { date: apiDateToIso(history[0].date), nav: Number(history[0].nav) }
     : null;
@@ -129,51 +167,34 @@ type YahooChartResponse = {
 
 type EtfPricePoint = { date: string; price: number };
 
-function timestampToIso(timestamp: number) {
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  }).formatToParts(new Date(timestamp * 1000));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
+export type EtfSnapshot = {
+  history: EtfPricePoint[];
+  live: { price: number; timestamp: number | null } | null;
+};
 
-async function getEtfQuote(symbol: string) {
+const EMPTY_ETF_SNAPSHOT: EtfSnapshot = { history: [], live: null };
+
+// A single Yahoo chart call with a long range returns both the full daily-close
+// history (meta aside) *and* the live regularMarketPrice/regularMarketTime in its
+// `meta` block, so one request covers what used to be two separate fetches
+// (a `range=1d` quote call and a `range=1mo` history call). `range=max` also fixes a
+// real bug: with only a 1-month window, any date older than that had no matching close
+// and fell back to flat book value, producing a fake one-day "jump" once real prices
+// started — full history removes that discontinuity.
+async function getEtfSnapshot(symbol: string): Promise<EtfSnapshot> {
   try {
     const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1d&interval=5m`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=max&interval=1d`,
       {
         headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-        next: { revalidate: 60 },
-        signal: AbortSignal.timeout(6000),
+        ...NO_STORE,
+        signal: AbortSignal.timeout(8000),
       },
     );
-    if (!response.ok) return null;
-    const payload = (await response.json()) as YahooChartResponse;
-    const meta = payload.chart?.result?.[0]?.meta;
-    if (!meta?.regularMarketPrice) return null;
-    return { price: meta.regularMarketPrice, timestamp: meta.regularMarketTime ?? null };
-  } catch {
-    return null;
-  }
-}
-
-async function getEtfHistory(symbol: string): Promise<EtfPricePoint[]> {
-  try {
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=1mo&interval=1d`,
-      {
-        headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-        next: { revalidate: 60 },
-        signal: AbortSignal.timeout(6000),
-      },
-    );
-    if (!response.ok) return [];
+    if (!response.ok) return EMPTY_ETF_SNAPSHOT;
     const payload = (await response.json()) as YahooChartResponse;
     const result = payload.chart?.result?.[0];
-    if (!result) return [];
+    if (!result) return EMPTY_ETF_SNAPSHOT;
 
     const prices = new Map<string, EtfPricePoint>();
     const closes = result.indicators?.quote?.[0]?.close ?? [];
@@ -184,26 +205,33 @@ async function getEtfHistory(symbol: string): Promise<EtfPricePoint[]> {
         prices.set(date, { date, price });
       }
     }
-    if (result.meta?.regularMarketPrice && result.meta.regularMarketTime) {
-      const date = timestampToIso(result.meta.regularMarketTime);
-      prices.set(date, { date, price: result.meta.regularMarketPrice });
+    const meta = result.meta;
+    const live = meta?.regularMarketPrice
+      ? { price: meta.regularMarketPrice, timestamp: meta.regularMarketTime ?? null }
+      : null;
+    if (live && meta?.regularMarketTime) {
+      prices.set(timestampToIso(meta.regularMarketTime), { date: timestampToIso(meta.regularMarketTime), price: live.price });
     }
-    return [...prices.values()].sort((a, b) => a.date.localeCompare(b.date));
-  } catch {
-    return [];
+    return { history: [...prices.values()].sort((a, b) => a.date.localeCompare(b.date)), live };
+  } catch (error) {
+    console.error(`getEtfSnapshot(${symbol}) failed`, error);
+    return EMPTY_ETF_SNAPSHOT;
   }
 }
 
-export async function enrichEtf(etf: Etf): Promise<Holding> {
-  const quote = await getEtfQuote(etf.symbol);
-  const price = quote?.price ?? etf.last_price ?? etf.avg_price;
+export function enrichEtf(etf: Etf, snapshot: EtfSnapshot | undefined): Holding {
+  const live = snapshot?.live ?? null;
+  const lastClose = snapshot?.history.at(-1) ?? null;
+  const price = live?.price ?? lastClose?.price ?? etf.last_price ?? etf.avg_price;
   const currentValue = price * etf.quantity;
   const gain = currentValue - etf.invested_amount;
-  const quoteTime = quote?.timestamp
-    ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(quote.timestamp * 1000))
-    : etf.last_price_at
-      ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(new Date(etf.last_price_at))
-      : "Saved price";
+  const quoteTime = live?.timestamp
+    ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(live.timestamp * 1000))
+    : lastClose
+      ? `Close, ${friendlyDate(lastClose.date)}`
+      : etf.last_price_at
+        ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(new Date(etf.last_price_at))
+        : "Saved price";
 
   return {
     id: etf.id,
@@ -227,16 +255,41 @@ export async function enrichEtf(etf: Etf): Promise<Holding> {
   };
 }
 
-export async function getPortfolioSeries(
+export type MarketData = {
+  latestFundNavs: ReadonlyMap<number, LatestFundNav>;
+  fundHistories: ReadonlyMap<number, NavPoint[]>;
+  etfSnapshots: ReadonlyMap<string, EtfSnapshot>;
+};
+
+// Fetched once per render and shared by enrichFund/enrichEtf/getPortfolioSeries below,
+// instead of each of them independently re-fetching the same scheme code or symbol.
+// Halving the number of outbound requests matters on Vercel's free plan: it keeps the
+// function comfortably under the execution-time cap even when upstream is slow, and
+// it's kinder to mfapi.in/Yahoo, which have no authenticated, higher-rate-limit tier here.
+export async function loadMarketData(funds: Fund[], etfs: Etf[]): Promise<MarketData> {
+  const schemeCodes = [...new Set(funds.map((fund) => fund.scheme_code))];
+  const symbols = [...new Set(etfs.map((etf) => etf.symbol))];
+  const [latestFundNavs, historyEntries, snapshotEntries] = await Promise.all([
+    getLatestFundNavs(),
+    Promise.all(schemeCodes.map(async (code) => [code, await getNavHistory(code)] as const)),
+    Promise.all(symbols.map(async (symbol) => [symbol, await getEtfSnapshot(symbol)] as const)),
+  ]);
+  return {
+    latestFundNavs,
+    fundHistories: new Map(historyEntries),
+    etfSnapshots: new Map(snapshotEntries),
+  };
+}
+
+export function getPortfolioSeries(
   funds: Fund[],
   etfs: Etf[],
+  fundHistories: ReadonlyMap<number, NavPoint[]>,
+  etfSnapshots: ReadonlyMap<string, EtfSnapshot>,
   latestFundNavs: ReadonlyMap<number, LatestFundNav> = new Map(),
-): Promise<PortfolioPoint[]> {
-  const [histories, etfHistories] = await Promise.all([
-    Promise.all(funds.map(async (fund) => ({ fund, history: await getNavHistory(fund.scheme_code) }))),
-    Promise.all(etfs.map(async (etf) => ({ etf, history: await getEtfHistory(etf.symbol) }))),
-  ]);
-  const datedHistories = histories.map(({ fund, history }) => {
+): PortfolioPoint[] {
+  const datedHistories = funds.map((fund) => {
+    const history = fundHistories.get(fund.scheme_code) ?? [];
     const historicalPoints = history
       .map((point) => ({ date: apiDateToIso(point.date), nav: Number(point.nav) }))
       .filter((point) => point.date >= fund.purchase_date && Number.isFinite(point.nav));
@@ -248,6 +301,7 @@ export async function getPortfolioSeries(
     const units = fund.units ?? (purchaseNav ? fund.invested_amount / purchaseNav : null);
     return { fund, chronological, units };
   });
+  const etfHistories = etfs.map((etf) => ({ etf, history: etfSnapshots.get(etf.symbol)?.history ?? [] }));
   const dates = [...new Set(datedHistories.flatMap(({ chronological }) => chronological.map((point) => point.date)))].sort();
   const etfInvested = etfs.reduce((sum, etf) => sum + etf.invested_amount, 0);
   const etfCurrent = etfHistories.reduce((sum, item) => {
@@ -261,9 +315,14 @@ export async function getPortfolioSeries(
       const latest = item.chronological.at(-1)?.nav;
       return sum + (latest && item.units ? latest * item.units : item.fund.invested_amount);
     }, 0);
+    const earliestPurchase = funds.reduce<string | null>(
+      (min, fund) => (!min || fund.purchase_date < min ? fund.purchase_date : min),
+      null,
+    );
+    const baselineDate = earliestPurchase ?? todayIso();
     return [
-      { date: "2026-08-04", label: "4 Aug", value: invested },
-      { date: new Date().toISOString().slice(0, 10), label: "Latest", value: currentFunds + etfCurrent },
+      { date: baselineDate, label: shortLabel(baselineDate), value: invested },
+      { date: todayIso(), label: "Latest", value: currentFunds + etfCurrent },
     ];
   }
 
@@ -278,15 +337,21 @@ export async function getPortfolioSeries(
     }, 0);
     return {
       date,
-      label: new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00`)),
+      label: shortLabel(date),
       value: fundValue + etfValue,
     };
   });
 }
 
+// Below this threshold a day's move is treated as noise (rounding/estimation drift)
+// rather than a real market move, and rendered as "Flat" in the movement calendar.
+const FLAT_THRESHOLD_PERCENT = 0.005;
+
 export function getDailyMovement(series: PortfolioPoint[]): DailyMovement[] {
   return series.slice(1).map((point, index) => {
     const previous = series[index].value;
-    return { date: point.date, change: previous ? ((point.value - previous) / previous) * 100 : 0 };
+    if (!previous) return { date: point.date, change: 0 };
+    const change = ((point.value - previous) / previous) * 100;
+    return { date: point.date, change: Math.abs(change) < FLAT_THRESHOLD_PERCENT ? 0 : change };
   });
 }

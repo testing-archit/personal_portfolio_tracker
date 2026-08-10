@@ -1,8 +1,8 @@
 import { ArrowDownRight, ArrowUpRight, Clock3, LogOut, RefreshCw, Sparkles, WalletCards } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { enrichEtf, enrichFund, getDailyMovement, getLatestFundNavs, getPortfolioSeries } from "@/lib/nav";
+import { enrichEtf, enrichFund, getDailyMovement, getPortfolioSeries, loadMarketData } from "@/lib/nav";
 import type { Etf, Fund } from "@/lib/types";
-import { compactInr, inr } from "@/lib/format";
+import { compactInr, friendlyDate, inr } from "@/lib/format";
 import { AddFund } from "@/components/add-fund";
 import { AllocationRing } from "@/components/allocation-ring";
 import { HoldingsTable } from "@/components/holdings-table";
@@ -28,18 +28,22 @@ export default async function Dashboard() {
   ]);
   const funds = (fundData ?? []) as Fund[];
   const etfs = (etfData ?? []) as Etf[];
-  const latestFundNavs = await getLatestFundNavs();
-  const holdings = await Promise.all([
-    ...funds.map((fund) => enrichFund(fund, latestFundNavs.get(fund.scheme_code))),
-    ...etfs.map(enrichEtf),
-  ]);
-  const portfolioSeries = await getPortfolioSeries(funds, etfs, latestFundNavs);
+  const { latestFundNavs, fundHistories, etfSnapshots } = await loadMarketData(funds, etfs);
+  const holdings = [
+    ...funds.map((fund) => enrichFund(fund, fundHistories.get(fund.scheme_code) ?? [], latestFundNavs.get(fund.scheme_code))),
+    ...etfs.map((etf) => enrichEtf(etf, etfSnapshots.get(etf.symbol))),
+  ];
+  const portfolioSeries = getPortfolioSeries(funds, etfs, fundHistories, etfSnapshots, latestFundNavs);
   const dailyMovement = getDailyMovement(portfolioSeries);
   const invested = holdings.reduce((sum, item) => sum + item.invested_amount, 0);
   const current = holdings.reduce((sum, item) => sum + item.currentValue, 0);
   const gain = current - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
   const latestDate = holdings.find((item) => item.currentNavDate)?.currentNavDate;
+  const earliestPurchaseDate = funds.reduce<string | null>(
+    (min, fund) => (!min || fund.purchase_date < min ? fund.purchase_date : min),
+    null,
+  );
   const name = user?.email?.split("@")[0] ?? "Investor";
 
   return (
@@ -58,7 +62,7 @@ export default async function Dashboard() {
             <section className="metric-grid">
               <article className="metric hero-metric"><p>Current value</p><strong>{inr.format(current)}</strong><div className={gain >= 0 ? "gain-pill" : "gain-pill loss"}>{gain >= 0 ? <ArrowUpRight/> : <ArrowDownRight/>}{gainPct >= 0 ? "+" : ""}{gainPct.toFixed(2)}%</div><small>All your holdings combined</small></article>
               <article className="metric"><p>Total invested</p><strong>{inr.format(invested)}</strong><small>Across {holdings.length} funds and ETFs</small></article>
-              <article className="metric"><p>Total returns</p><strong className={gain >= 0 ? "positive" : "negative"}>{gain >= 0 ? "+" : ""}{inr.format(gain)}</strong><small>Since 4 Aug 2026</small></article>
+              <article className="metric"><p>Total returns</p><strong className={gain >= 0 ? "positive" : "negative"}>{gain >= 0 ? "+" : ""}{inr.format(gain)}</strong><small>{earliestPurchaseDate ? `Since ${friendlyDate(earliestPurchaseDate)}` : "Since first purchase"}</small></article>
               <article className="metric"><p>Best performer</p><strong className="fund-winner">{[...holdings].sort((a,b) => b.gainPercent-a.gainPercent)[0]?.short_name}</strong><small className="positive">{Math.max(...holdings.map(h => h.gainPercent)).toFixed(2)}% return</small></article>
             </section>
             <article className="panel chart-panel full-panel"><div className="panel-head"><div><p className="eyebrow">PORTFOLIO MOVEMENT</p><h2>{compactInr.format(current)}</h2></div><span className="live-chip"><i/> Interactive history</span></div><PortfolioChart series={portfolioSeries} invested={invested} current={current}/></article>
