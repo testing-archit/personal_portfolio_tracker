@@ -108,7 +108,9 @@ export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFun
       }
     }
     if (latestNavs.size === 0) {
-      console.error("getLatestFundNavs: AMFI feed parsed to zero entries, format may have changed");
+      console.error(
+        `getLatestFundNavs: AMFI feed parsed to zero entries. status=${response.status} content-type=${response.headers.get("content-type")} length=${body.length} preview=${JSON.stringify(body.slice(0, 300))}`,
+      );
     }
     return latestNavs;
   } catch (error) {
