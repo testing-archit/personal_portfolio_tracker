@@ -18,6 +18,22 @@ export type LatestFundNav = {
 // window we can't observe.
 const NO_STORE = { cache: "no-store" as const };
 
+// portal.amfiindia.com in particular is slow and inconsistent — the same request can take
+// 200ms or 10s back to back — so a single timed-out attempt shouldn't be treated as "no data
+// today." One retry recovers most of these transient stalls instead of silently falling back
+// to a staler source for the rest of the render.
+async function fetchWithRetry(url: string, init: RequestInit, timeoutMs: number, attempts = 2): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 const monthNumbers: Record<string, string> = {
   jan: "01",
   feb: "02",
@@ -69,11 +85,11 @@ function shortLabel(date: string) {
 
 export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFundNav>> {
   try {
-    const response = await fetch("https://portal.amfiindia.com/spages/NAVAll.txt", {
-      headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-      ...NO_STORE,
-      signal: AbortSignal.timeout(12000),
-    });
+    const response = await fetchWithRetry(
+      "https://portal.amfiindia.com/spages/NAVAll.txt",
+      { headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" }, ...NO_STORE },
+      12000,
+    );
     if (!response.ok) {
       console.error(`getLatestFundNavs: AMFI feed returned ${response.status}`);
       return new Map();
@@ -103,10 +119,7 @@ export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFun
 
 async function getNavHistory(schemeCode: number): Promise<NavPoint[]> {
   try {
-    const response = await fetch(`https://api.mfapi.in/mf/${schemeCode}`, {
-      ...NO_STORE,
-      signal: AbortSignal.timeout(8000),
-    });
+    const response = await fetchWithRetry(`https://api.mfapi.in/mf/${schemeCode}`, NO_STORE, 8000);
     if (!response.ok) return [];
     const payload = (await response.json()) as MfApiResponse;
     return payload.data ?? [];
@@ -185,13 +198,10 @@ const EMPTY_ETF_SNAPSHOT: EtfSnapshot = { history: [], live: null };
 // started — full history removes that discontinuity.
 async function getEtfSnapshot(symbol: string): Promise<EtfSnapshot> {
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}.NS?range=max&interval=1d`,
-      {
-        headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" },
-        ...NO_STORE,
-        signal: AbortSignal.timeout(8000),
-      },
+      { headers: { "User-Agent": "Mozilla/5.0 Folio/1.0" }, ...NO_STORE },
+      8000,
     );
     if (!response.ok) return EMPTY_ETF_SNAPSHOT;
     const payload = (await response.json()) as YahooChartResponse;

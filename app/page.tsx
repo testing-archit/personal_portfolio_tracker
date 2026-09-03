@@ -18,6 +18,9 @@ import { SubmitButton } from "@/components/submit-button";
 import { logout, seedPortfolio } from "./actions";
 
 export const dynamic = "force-dynamic";
+// The AMFI feed alone can take up to 2×12s with the retry in lib/nav.ts; without this,
+// Vercel's default function timeout can kill the request before that retry gets to run.
+export const maxDuration = 30;
 
 export default async function Dashboard() {
   const supabase = await createClient();
