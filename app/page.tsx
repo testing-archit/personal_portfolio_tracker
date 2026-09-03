@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Clock3, LogOut, RefreshCw, Sparkles, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clock3, LogOut, RefreshCw, Sparkles, WalletCards } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { enrichEtf, enrichFund, getDailyMovement, getPortfolioSeries, loadMarketData } from "@/lib/nav";
 import type { Etf, Fund } from "@/lib/types";
@@ -25,10 +25,35 @@ export const maxDuration = 30;
 export default async function Dashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const [{ data: fundData }, { data: etfData }] = await Promise.all([
+  const [{ data: fundData, error: fundsError }, { data: etfData, error: etfsError }] = await Promise.all([
     supabase.from("funds").select("*").order("invested_amount", { ascending: false }),
     supabase.from("etfs").select("*").order("invested_amount", { ascending: false }),
   ]);
+  const loadError = fundsError ?? etfsError;
+  const name = user?.email?.split("@")[0] ?? "Investor";
+
+  // A failed query must never render as "no holdings yet" — that state offers a
+  // "Load my 4 purchases" seed button, which would look like a safe retry but is
+  // actually destructive for an account that has real data the query just failed to fetch.
+  if (loadError) {
+    return (
+      <main className="dashboard-shell">
+        <header className="topbar">
+          <a className="brand" href="#"><span>F</span>folio</a>
+          <div className="top-actions"><form action={logout}><SubmitButton className="icon-button" aria-label="Sign out"><LogOut size={18}/></SubmitButton></form></div>
+        </header>
+        <section className="dashboard-content">
+          <section className="empty-state">
+            <div className="empty-icon error"><AlertTriangle/></div>
+            <p className="eyebrow">CONNECTION ISSUE</p>
+            <h2>Couldn't load your portfolio</h2>
+            <p>We couldn&apos;t reach the database just now. Your data is safe — this is a connection hiccup, not data loss. Refresh in a moment to try again.</p>
+          </section>
+        </section>
+      </main>
+    );
+  }
+
   const funds = (fundData ?? []) as Fund[];
   const etfs = (etfData ?? []) as Etf[];
   const { latestFundNavs, fundHistories, etfSnapshots } = await loadMarketData(funds, etfs);
@@ -51,7 +76,6 @@ export default async function Dashboard() {
     (min, fund) => (!min || fund.purchase_date < min ? fund.purchase_date : min),
     null,
   );
-  const name = user?.email?.split("@")[0] ?? "Investor";
 
   return (
     <main className="dashboard-shell">
