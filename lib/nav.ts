@@ -44,7 +44,7 @@ function amfiDateToIso(value: string) {
   return day && monthNumber && year ? `${year}-${monthNumber}-${day.padStart(2, "0")}` : null;
 }
 
-function dateToIso(date: Date) {
+export function dateToIso(date: Date) {
   const parts = new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "2-digit",
@@ -55,7 +55,7 @@ function dateToIso(date: Date) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function timestampToIso(timestamp: number) {
+export function timestampToIso(timestamp: number) {
   return dateToIso(new Date(timestamp * 1000));
 }
 
@@ -147,6 +147,7 @@ export function enrichFund(fund: Fund, history: NavPoint[], officialLatest?: Lat
     purchase_nav: fund.purchase_nav,
     currentNav,
     currentNavDate: latest ? friendlyDate(latest.date) : null,
+    currentNavIsoDate: latest?.date ?? null,
     effectivePurchaseNav: purchaseNav,
     effectiveUnits: units,
     currentValue,
@@ -233,6 +234,13 @@ export function enrichEtf(etf: Etf, snapshot: EtfSnapshot | undefined): Holding 
       : etf.last_price_at
         ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(new Date(etf.last_price_at))
         : "Saved price";
+  const currentNavIsoDate = live?.timestamp
+    ? timestampToIso(live.timestamp)
+    : lastClose
+      ? lastClose.date
+      : etf.last_price_at
+        ? dateToIso(new Date(etf.last_price_at))
+        : null;
 
   return {
     id: etf.id,
@@ -248,6 +256,7 @@ export function enrichEtf(etf: Etf, snapshot: EtfSnapshot | undefined): Holding 
     purchase_nav: etf.avg_price,
     currentNav: price,
     currentNavDate: quoteTime,
+    currentNavIsoDate,
     effectivePurchaseNav: etf.avg_price,
     effectiveUnits: etf.quantity,
     currentValue,

@@ -44,6 +44,7 @@ export type Holding = {
   purchase_nav: number | null;
   currentNav: number | null;
   currentNavDate: string | null;
+  currentNavIsoDate: string | null;
   effectiveUnits: number | null;
   effectivePurchaseNav: number | null;
   currentValue: number;

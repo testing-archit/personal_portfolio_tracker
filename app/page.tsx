@@ -39,7 +39,11 @@ export default async function Dashboard() {
   const current = holdings.reduce((sum, item) => sum + item.currentValue, 0);
   const gain = current - invested;
   const gainPct = invested ? (gain / invested) * 100 : 0;
-  const latestDate = holdings.find((item) => item.currentNavDate)?.currentNavDate;
+  const freshestIsoDate = holdings.reduce<string | null>(
+    (max, item) => (item.currentNavIsoDate && (!max || item.currentNavIsoDate > max) ? item.currentNavIsoDate : max),
+    null,
+  );
+  const latestDate = freshestIsoDate ? friendlyDate(freshestIsoDate) : undefined;
   const earliestPurchaseDate = funds.reduce<string | null>(
     (min, fund) => (!min || fund.purchase_date < min ? fund.purchase_date : min),
     null,
