@@ -21,6 +21,10 @@ export const dynamic = "force-dynamic";
 // The AMFI feed alone can take up to 2×12s with the retry in lib/nav.ts; without this,
 // Vercel's default function timeout can kill the request before that retry gets to run.
 export const maxDuration = 30;
+// All the market-data fetches (AMFI, mfapi.in, Yahoo Finance for NSE) are India-hosted.
+// Left on Vercel's default US region, every request crosses the Atlantic round-trip,
+// which is most of why the AMFI feed specifically was timing out in production.
+export const preferredRegion = "bom1";
 
 export default async function Dashboard() {
   const supabase = await createClient();
