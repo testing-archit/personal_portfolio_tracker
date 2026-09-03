@@ -99,18 +99,17 @@ export async function getLatestFundNavs(): Promise<ReadonlyMap<number, LatestFun
     const body = await response.text();
     for (const line of body.split(/\r?\n/)) {
       const columns = line.split(";");
-      if (columns.length < 6) continue;
+      // Scheme Code;ISIN Div Payout;ISIN Reinvestment;Scheme Name;Plan;Option;NAV;Date
+      if (columns.length < 8) continue;
       const schemeCode = Number(columns[0]);
-      const nav = Number(columns[4]);
-      const date = amfiDateToIso(columns[5]);
+      const nav = Number(columns[6]);
+      const date = amfiDateToIso(columns[7]);
       if (Number.isInteger(schemeCode) && Number.isFinite(nav) && nav > 0 && date) {
         latestNavs.set(schemeCode, { date, nav });
       }
     }
     if (latestNavs.size === 0) {
-      console.error(
-        `getLatestFundNavs: AMFI feed parsed to zero entries. status=${response.status} content-type=${response.headers.get("content-type")} length=${body.length} preview=${JSON.stringify(body.slice(0, 300))}`,
-      );
+      console.error(`getLatestFundNavs: AMFI feed parsed to zero entries, format may have changed. preview=${JSON.stringify(body.slice(0, 200))}`);
     }
     return latestNavs;
   } catch (error) {
